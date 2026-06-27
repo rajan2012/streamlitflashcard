@@ -56,19 +56,21 @@ total = len(all_cards)
 st.title("German → English")
 st.caption(f"{total:,} words · {secret('S3_KEY')}")
 
-c1, c2 = st.columns(2)
+SIZES = [20, 30, 50, 70, 90]
+
+c1, c2 = st.columns([1, 2])
 start = c1.number_input("From row", min_value=1, max_value=total, value=1, step=1)
-end = c2.number_input("To row", min_value=1, max_value=total, value=min(20, total), step=1)
+size = c2.segmented_control(
+    "How many words", SIZES, default=20, selection_mode="single"
+) or 20
+
+end = min(int(start) + int(size) - 1, total)
 
 c3, c4 = st.columns([2, 1])
 direction_label = c3.radio("Show first", ["Deutsch", "English"], horizontal=True)
 shuffle = c4.toggle("Shuffle")
 
-if start > end:
-    st.warning("“From” row must be less than or equal to “To” row.")
-    st.stop()
-
-selected = all_cards[int(start) - 1:int(end)]
+selected = all_cards[int(start) - 1:end]
 direction = "de-en" if direction_label == "Deutsch" else "en-de"
 
 # ── render the swipe component ────────────────────────────────
@@ -79,6 +81,6 @@ html = template.replace("/*__PAYLOAD__*/", payload)
 st.components.v1.html(html, height=640, scrolling=False)
 
 st.caption(
-    f"Practicing rows {int(start)}–{int(end)} ({len(selected)} words). "
+    f"Practicing rows {int(start)}–{end} ({len(selected)} words). "
     "Right swipe = known · left swipe = comes back around."
 )
