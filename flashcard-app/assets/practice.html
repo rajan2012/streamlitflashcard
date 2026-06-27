@@ -9,8 +9,8 @@
     --fm:"JetBrains Mono",ui-monospace,monospace;
   }
   *{box-sizing:border-box;margin:0;padding:0}
-  #wrap{font-family:var(--fb);color:#efeaf6;height:620px;display:flex;flex-direction:column;
-    align-items:center;justify-content:center;gap:14px}
+  #wrap{font-family:var(--fb);color:#efeaf6;height:640px;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:12px}
   .hud{width:min(86vw,360px);display:flex;align-items:center;gap:12px}
   .hud button{flex:none;width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.06);
     border:1px solid var(--line);color:#d9d2e8;font-size:18px;cursor:pointer;display:grid;place-items:center}
@@ -38,6 +38,10 @@
     letter-spacing:-.02em;font-size:clamp(26px,7vw,42px);word-break:break-word}
   .back .word{color:#4a3f63}
   .reveal{position:absolute;bottom:18px;left:0;right:0;font-size:11px;color:var(--ink-soft)}
+  /* small "seen N times" pill on stubborn cards */
+  .seen{position:absolute;top:14px;right:14px;font-family:var(--fm);font-size:9.5px;
+    letter-spacing:.04em;color:var(--review);background:rgba(246,169,59,.14);
+    border:1px solid rgba(246,169,59,.4);border-radius:99px;padding:3px 8px;display:none}
   .stamp{position:absolute;top:24px;font-family:var(--fd);font-weight:800;font-size:24px;
     padding:5px 12px;border-radius:10px;border:3px solid currentColor;opacity:0;z-index:2;pointer-events:none}
   .stamp.k{right:20px;color:var(--know);transform:rotate(12deg)}
@@ -52,12 +56,19 @@
   .ctrl.r{width:60px;height:60px;font-size:24px;color:var(--review)}
   .ctrl.k{width:60px;height:60px;font-size:24px;color:var(--know)}
   .hint{font-size:11px;color:var(--muted);text-align:center}
+  /* park-for-later chip: appears only on words seen enough times */
+  .park{font-family:var(--fb);font-size:11.5px;color:var(--review);
+    background:rgba(246,169,59,.10);border:1px solid rgba(246,169,59,.35);
+    border-radius:99px;padding:7px 14px;cursor:pointer;display:none;transition:background .15s}
+  .park:hover{background:rgba(246,169,59,.2)}
   .done{text-align:center;display:none;flex-direction:column;align-items:center;gap:8px}
   .done .mark{font-size:42px;color:var(--know);filter:drop-shadow(0 0 20px rgba(52,211,153,.5))}
   .done h2{font-family:var(--fd);font-weight:800;font-size:28px}
-  .done p{color:var(--muted);font-size:13px}
-  .done button{margin-top:14px;font-family:var(--fd);font-weight:700;background:var(--accent);
-    color:#1a1330;border:0;border-radius:12px;padding:12px 20px;cursor:pointer}
+  .done p{color:var(--muted);font-size:13px;max-width:300px}
+  .done .acts{display:flex;flex-direction:column;gap:9px;margin-top:14px;width:min(80vw,300px)}
+  .done .acts button{font-family:var(--fd);font-weight:700;border-radius:12px;padding:12px 18px;cursor:pointer;border:0}
+  .done .primary{background:var(--accent);color:#1a1330}
+  .done .ghost{background:transparent;color:#d9d2e8;border:1px solid var(--line)}
   button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 </style>
 
@@ -75,30 +86,32 @@
   </div>
   <div class="deck" id="deck"></div>
   <div class="ctrls" id="controls">
-    <button class="ctrl r" id="bR" aria-label="Review again">✕</button>
+    <button class="ctrl r" id="bR" aria-label="Practice again">✕</button>
     <button class="ctrl f" id="bF" aria-label="Flip">↺</button>
     <button class="ctrl k" id="bK" aria-label="I know it">✓</button>
   </div>
-  <p class="hint" id="hint">Tap card to flip · drag right if you know it · left to see it again</p>
+  <p class="hint" id="hint">Tap to flip · right = I know it · left = practice again</p>
+  <button class="park" id="park">⏸ Park this word for later</button>
 
   <div class="done" id="done">
     <div class="mark">✦</div>
-    <h2>Deck cleared</h2>
+    <h2 id="doneTitle">Deck cleared</h2>
     <p id="doneSub"></p>
-    <button onclick="restart()">Practice this range again</button>
+    <div class="acts" id="doneActs"></div>
   </div>
 </div>
 
 <script>
 const DATA = /*__PAYLOAD__*/;
+const PARK_AFTER = 3;  // show "park" once a word has been practiced this many times
 
 function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]];}return a;}
 
-let queue,known,history,passes;
-function build(){
-  let prep = DATA.cards.map((c,i)=>({id:i,german:c.german,english:c.english}));
+let queue,known,parked,history,passes;
+function build(cards){
+  let prep = (cards||DATA.cards).map((c,i)=>({id:i,german:c.german,english:c.english,seen:0}));
   if(DATA.shuffle) shuffle(prep);
-  queue=prep; known=new Set(); history=[]; passes=0;
+  queue=prep; known=new Set(); parked=[]; history=[]; passes=0;
 }
 const total = DATA.cards.length;
 const faces = c => DATA.direction==="de-en"
@@ -114,9 +127,10 @@ function render(){
   const vis=queue.slice(0,3).reverse();
   vis.forEach((c,i)=>{
     const d=vis.length-1-i, fc=faces(c);
+    const seenBadge = c.seen>0 ? `<span class="seen" style="display:block">practiced ${c.seen}×</span>` : `<span class="seen"></span>`;
     const el=document.createElement("div");
     el.className="card"; el.dataset.d=d;
-    el.innerHTML=`<span class="stamp k">KNOW</span><span class="stamp r">AGAIN</span>
+    el.innerHTML=`${seenBadge}<span class="stamp k">KNOW</span><span class="stamp r">AGAIN</span>
       <div class="inner">
         <div class="face front"><span class="tag">${fc.ft}</span><span class="word"></span><span class="reveal">tap to reveal</span></div>
         <div class="face back"><span class="tag">${fc.bt}</span><span class="word"></span></div>
@@ -126,6 +140,8 @@ function render(){
     deckEl.appendChild(el);
   });
   attach(deckEl.lastElementChild);
+  // show the park option only once the top word has been seen enough times
+  $("park").style.display = (queue[0].seen >= PARK_AFTER) ? "block" : "none";
   hud();
 }
 
@@ -139,13 +155,19 @@ function hud(){
 function decide(dir){
   const card=queue.shift();
   if(dir==="know"){known.add(card.id);history.push({a:"know",card});}
-  else{queue.push(card);passes++;history.push({a:"review",card});}
+  else{card.seen++;queue.push(card);passes++;history.push({a:"review",card});}
+  render();
+}
+function park(){
+  const card=queue.shift(); if(!card) return;
+  parked.push(card); history.push({a:"park",card});
   render();
 }
 function undo(){
   const h=history.pop(); if(!h) return;
   if(h.a==="know"){known.delete(h.card.id);queue.unshift(h.card);}
-  else{const i=queue.lastIndexOf(h.card);if(i>-1)queue.splice(i,1);queue.unshift(h.card);passes=Math.max(0,passes-1);}
+  else if(h.a==="park"){const i=parked.lastIndexOf(h.card);if(i>-1)parked.splice(i,1);queue.unshift(h.card);}
+  else{const i=queue.lastIndexOf(h.card);if(i>-1)queue.splice(i,1);h.card.seen=Math.max(0,h.card.seen-1);queue.unshift(h.card);passes=Math.max(0,passes-1);}
   render();
 }
 function flip(){const t=deckEl.lastElementChild;if(t)t.classList.toggle("flip");}
@@ -190,26 +212,47 @@ $("bK").onclick=()=>flingTop("know");
 $("bR").onclick=()=>flingTop("review");
 $("bF").onclick=flip;
 $("undo").onclick=undo;
+$("park").onclick=park;
 document.addEventListener("keydown",e=>{
   if($("done").style.display==="flex")return;
   if(e.key==="ArrowRight"){e.preventDefault();flingTop("know");}
   else if(e.key==="ArrowLeft"){e.preventDefault();flingTop("review");}
   else if(e.key===" "||e.key==="ArrowUp"||e.key==="ArrowDown"){e.preventDefault();flip();}
   else if(e.key==="Backspace"){e.preventDefault();undo();}
+  else if(e.key.toLowerCase()==="p"){e.preventDefault();if($("park").style.display==="block")park();}
 });
 
-function finish(){
-  $("play").style.display="none"; deckEl.style.display="none";
-  $("controls").style.display="none"; $("hint").style.display="none";
-  $("done").style.display="flex";
-  $("doneSub").textContent = passes===0
-    ? "Clean run — you knew every word first time."
-    : `You looped back ${passes} time${passes===1?"":"s"} on the tricky ones.`;
+function show(view){ // "play" or "done"
+  const playing = view==="play";
+  $("play").style.display=playing?"flex":"none";
+  deckEl.style.display=playing?"block":"none";
+  $("controls").style.display=playing?"flex":"none";
+  $("hint").style.display=playing?"block":"none";
+  if(!playing) $("park").style.display="none";
+  $("done").style.display=playing?"none":"flex";
 }
-function restart(){
-  $("play").style.display="flex"; deckEl.style.display="block";
-  $("controls").style.display="flex"; $("hint").style.display="block";
-  $("done").style.display="none"; build(); render();
+
+function finish(){
+  show("done");
+  $("doneTitle").textContent = parked.length ? "Range done" : "Deck cleared";
+  let msg = known.size===total
+    ? (passes===0 ? "Clean run — you knew every word first time."
+                  : `You looped back ${passes} time${passes===1?"":"s"} on the tricky ones.`)
+    : `You knew ${known.size} of ${total}. ${parked.length} word${parked.length===1?"":"s"} parked for later.`;
+  $("doneSub").textContent = msg;
+
+  const acts=$("doneActs"); acts.innerHTML="";
+  if(parked.length){
+    const b=document.createElement("button");
+    b.className="primary"; b.textContent=`Practice parked words (${parked.length})`;
+    b.onclick=()=>{ const p=parked.slice(); build(p); render(); show("play"); };
+    acts.appendChild(b);
+  }
+  const again=document.createElement("button");
+  again.className = parked.length ? "ghost" : "primary";
+  again.textContent="Practice this range again";
+  again.onclick=()=>{ build(); render(); show("play"); };
+  acts.appendChild(again);
 }
 
 build(); render();
