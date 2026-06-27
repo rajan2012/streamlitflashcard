@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Karten · German–English Flashcards</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <div class="grain" aria-hidden="true"></div>
+
+  <main class="app">
+
+    <!-- ════════════ SETUP SCREEN ════════════ -->
+    <section id="setup" class="screen setup is-active">
+      <header class="brand">
+        <span class="brand__eyebrow">Karteikarten</span>
+        <h1 class="brand__title">German <span>→</span> English</h1>
+        <p class="brand__sub" id="deck-meta">Connecting to your deck…</p>
+      </header>
+
+      <div class="panel">
+        <fieldset class="field">
+          <legend>Which rows do you want to practice?</legend>
+          <div class="range">
+            <label class="range__cell">
+              <span>From row</span>
+              <input id="start" type="number" min="1" value="1" inputmode="numeric" />
+            </label>
+            <span class="range__dash">–</span>
+            <label class="range__cell">
+              <span>To row</span>
+              <input id="end" type="number" min="1" value="20" inputmode="numeric" />
+            </label>
+          </div>
+          <div class="chips" id="quick-picks">
+            <button type="button" data-size="20">First 20</button>
+            <button type="button" data-size="50">First 50</button>
+            <button type="button" data-random="20">Random 20</button>
+          </div>
+        </fieldset>
+
+        <fieldset class="field">
+          <legend>Show me first</legend>
+          <div class="toggle" id="direction" role="radiogroup">
+            <button type="button" role="radio" aria-checked="true"  data-dir="de-en">Deutsch</button>
+            <button type="button" role="radio" aria-checked="false" data-dir="en-de">English</button>
+          </div>
+        </fieldset>
+
+        <label class="switch">
+          <input type="checkbox" id="shuffle" />
+          <span class="switch__track"><span class="switch__thumb"></span></span>
+          <span class="switch__label">Shuffle this range</span>
+        </label>
+
+        <button class="cta" id="start-btn">Start practicing</button>
+        <p class="panel__error" id="setup-error" hidden></p>
+      </div>
+    </section>
+
+    <!-- ════════════ PRACTICE SCREEN ════════════ -->
+    <section id="practice" class="screen practice">
+      <header class="hud">
+        <button class="hud__exit" id="exit-btn" title="Back to setup" aria-label="Back to setup">‹</button>
+        <div class="hud__progress">
+          <div class="bar"><span id="bar-fill" class="bar__fill"></span></div>
+          <div class="counts">
+            <span class="count count--know"><b id="count-known">0</b> known</span>
+            <span class="count count--left"><b id="count-left">0</b> in deck</span>
+          </div>
+        </div>
+        <button class="hud__undo" id="undo-btn" title="Undo last swipe" aria-label="Undo" disabled>↶</button>
+      </header>
+
+      <div class="stage">
+        <div class="deck" id="deck"></div>
+      </div>
+
+      <footer class="controls">
+        <button class="ctrl ctrl--review" id="btn-review" aria-label="Swipe left — review again">✕</button>
+        <button class="ctrl ctrl--flip"   id="btn-flip"   aria-label="Flip card">↺</button>
+        <button class="ctrl ctrl--know"   id="btn-know"   aria-label="Swipe right — I know this">✓</button>
+      </footer>
+      <p class="hint" id="hint">Tap the card to flip · swipe right if you know it · left to see it again</p>
+    </section>
+
+    <!-- ════════════ SUMMARY SCREEN ════════════ -->
+    <section id="summary" class="screen summary">
+      <div class="trophy" aria-hidden="true">✦</div>
+      <h2 class="summary__title">Deck cleared</h2>
+      <p class="summary__sub" id="summary-sub"></p>
+      <div class="summary__stats">
+        <div class="stat"><b id="sum-total">0</b><span>words</span></div>
+        <div class="stat"><b id="sum-loops">0</b><span>review passes</span></div>
+      </div>
+      <div class="summary__actions">
+        <button class="cta cta--ghost" id="again-btn">Practice same range again</button>
+        <button class="cta" id="new-btn">Choose a new range</button>
+      </div>
+    </section>
+
+  </main>
+
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>

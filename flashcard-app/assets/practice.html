@@ -1,0 +1,216 @@
+<!-- Self-contained flashcard practice UI, embedded inside Streamlit.
+     Python injects the selected cards + options at /*__PAYLOAD__*/. -->
+<style>
+  :root{
+    --paper:#f7f2e9;--paper-edge:#e7dccb;--ink:#211b2e;--ink-soft:#6c6480;
+    --muted:#9a91ad;--line:rgba(255,255,255,.10);--know:#34d399;--review:#f6a93b;
+    --accent:#b6a0ff;--r-lg:26px;
+    --fd:"Bricolage Grotesque",system-ui,sans-serif;--fb:"Inter",system-ui,sans-serif;
+    --fm:"JetBrains Mono",ui-monospace,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  #wrap{font-family:var(--fb);color:#efeaf6;height:620px;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:14px}
+  .hud{width:min(86vw,360px);display:flex;align-items:center;gap:12px}
+  .hud button{flex:none;width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.06);
+    border:1px solid var(--line);color:#d9d2e8;font-size:18px;cursor:pointer;display:grid;place-items:center}
+  .hud button:disabled{opacity:.3;cursor:default}
+  .prog{flex:1;display:flex;flex-direction:column;gap:6px}
+  .bar{height:6px;border-radius:99px;background:rgba(0,0,0,.3);overflow:hidden}
+  .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--know));
+    border-radius:99px;transition:width .4s cubic-bezier(.3,1,.4,1)}
+  .counts{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}
+  .counts b{font-family:var(--fm)} .counts .k b{color:var(--know)}
+  .deck{position:relative;width:min(82vw,320px);aspect-ratio:3/4}
+  .card{position:absolute;inset:0;border-radius:var(--r-lg);background:var(--paper);
+    box-shadow:0 24px 60px -18px rgba(0,0,0,.65);cursor:grab;perspective:1400px;
+    will-change:transform;touch-action:none}
+  .card.drag{cursor:grabbing;transition:none!important}
+  .inner{position:absolute;inset:0;transition:transform .5s cubic-bezier(.3,1,.4,1);transform-style:preserve-3d}
+  .card.flip .inner{transform:rotateY(180deg)}
+  .face{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;
+    border-radius:var(--r-lg);border:1px solid var(--paper-edge);display:flex;flex-direction:column;
+    align-items:center;justify-content:center;padding:28px;text-align:center}
+  .back{transform:rotateY(180deg)}
+  .tag{position:absolute;top:16px;left:0;right:0;font-family:var(--fm);font-size:10px;
+    letter-spacing:.28em;text-transform:uppercase;color:var(--ink-soft)}
+  .word{font-family:var(--fd);font-weight:800;color:var(--ink);line-height:1.06;
+    letter-spacing:-.02em;font-size:clamp(26px,7vw,42px);word-break:break-word}
+  .back .word{color:#4a3f63}
+  .reveal{position:absolute;bottom:18px;left:0;right:0;font-size:11px;color:var(--ink-soft)}
+  .stamp{position:absolute;top:24px;font-family:var(--fd);font-weight:800;font-size:24px;
+    padding:5px 12px;border-radius:10px;border:3px solid currentColor;opacity:0;z-index:2;pointer-events:none}
+  .stamp.k{right:20px;color:var(--know);transform:rotate(12deg)}
+  .stamp.r{left:20px;color:var(--review);transform:rotate(-12deg)}
+  .card[data-d="1"]{transform:translateY(13px) scale(.95);filter:brightness(.97);pointer-events:none}
+  .card[data-d="2"]{transform:translateY(26px) scale(.90);filter:brightness(.94);pointer-events:none}
+  .ctrls{display:flex;gap:20px;align-items:center}
+  .ctrl{border-radius:50%;border:1px solid var(--line);background:rgba(255,255,255,.06);
+    cursor:pointer;display:grid;place-items:center;transition:transform .12s,background .15s}
+  .ctrl:active{transform:scale(.9)}
+  .ctrl.f{width:50px;height:50px;font-size:20px;color:#d9d2e8}
+  .ctrl.r{width:60px;height:60px;font-size:24px;color:var(--review)}
+  .ctrl.k{width:60px;height:60px;font-size:24px;color:var(--know)}
+  .hint{font-size:11px;color:var(--muted);text-align:center}
+  .done{text-align:center;display:none;flex-direction:column;align-items:center;gap:8px}
+  .done .mark{font-size:42px;color:var(--know);filter:drop-shadow(0 0 20px rgba(52,211,153,.5))}
+  .done h2{font-family:var(--fd);font-weight:800;font-size:28px}
+  .done p{color:var(--muted);font-size:13px}
+  .done button{margin-top:14px;font-family:var(--fd);font-weight:700;background:var(--accent);
+    color:#1a1330;border:0;border-radius:12px;padding:12px 20px;cursor:pointer}
+  button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+</style>
+
+<div id="wrap">
+  <div class="hud" id="play">
+    <button id="undo" title="Undo" disabled>↶</button>
+    <div class="prog">
+      <div class="bar"><i id="fill"></i></div>
+      <div class="counts">
+        <span class="k"><b id="ck">0</b> known</span>
+        <span><b id="cl">0</b> in deck</span>
+      </div>
+    </div>
+    <span style="width:38px"></span>
+  </div>
+  <div class="deck" id="deck"></div>
+  <div class="ctrls" id="controls">
+    <button class="ctrl r" id="bR" aria-label="Review again">✕</button>
+    <button class="ctrl f" id="bF" aria-label="Flip">↺</button>
+    <button class="ctrl k" id="bK" aria-label="I know it">✓</button>
+  </div>
+  <p class="hint" id="hint">Tap card to flip · drag right if you know it · left to see it again</p>
+
+  <div class="done" id="done">
+    <div class="mark">✦</div>
+    <h2>Deck cleared</h2>
+    <p id="doneSub"></p>
+    <button onclick="restart()">Practice this range again</button>
+  </div>
+</div>
+
+<script>
+const DATA = /*__PAYLOAD__*/;
+
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]];}return a;}
+
+let queue,known,history,passes;
+function build(){
+  let prep = DATA.cards.map((c,i)=>({id:i,german:c.german,english:c.english}));
+  if(DATA.shuffle) shuffle(prep);
+  queue=prep; known=new Set(); history=[]; passes=0;
+}
+const total = DATA.cards.length;
+const faces = c => DATA.direction==="de-en"
+  ? {f:c.german,b:c.english,ft:"Deutsch",bt:"English"}
+  : {f:c.english,b:c.german,ft:"English",bt:"Deutsch"};
+
+const $=id=>document.getElementById(id);
+const deckEl=$("deck");
+
+function render(){
+  if(queue.length===0) return finish();
+  deckEl.innerHTML="";
+  const vis=queue.slice(0,3).reverse();
+  vis.forEach((c,i)=>{
+    const d=vis.length-1-i, fc=faces(c);
+    const el=document.createElement("div");
+    el.className="card"; el.dataset.d=d;
+    el.innerHTML=`<span class="stamp k">KNOW</span><span class="stamp r">AGAIN</span>
+      <div class="inner">
+        <div class="face front"><span class="tag">${fc.ft}</span><span class="word"></span><span class="reveal">tap to reveal</span></div>
+        <div class="face back"><span class="tag">${fc.bt}</span><span class="word"></span></div>
+      </div>`;
+    el.querySelector(".front .word").textContent=fc.f;
+    el.querySelector(".back .word").textContent=fc.b;
+    deckEl.appendChild(el);
+  });
+  attach(deckEl.lastElementChild);
+  hud();
+}
+
+function hud(){
+  $("fill").style.width=(known.size/total*100)+"%";
+  $("ck").textContent=known.size;
+  $("cl").textContent=queue.length;
+  $("undo").disabled=history.length===0;
+}
+
+function decide(dir){
+  const card=queue.shift();
+  if(dir==="know"){known.add(card.id);history.push({a:"know",card});}
+  else{queue.push(card);passes++;history.push({a:"review",card});}
+  render();
+}
+function undo(){
+  const h=history.pop(); if(!h) return;
+  if(h.a==="know"){known.delete(h.card.id);queue.unshift(h.card);}
+  else{const i=queue.lastIndexOf(h.card);if(i>-1)queue.splice(i,1);queue.unshift(h.card);passes=Math.max(0,passes-1);}
+  render();
+}
+function flip(){const t=deckEl.lastElementChild;if(t)t.classList.toggle("flip");}
+
+// ── drag / throw ──
+const TH=90, SLOP=8, ROT=.06;
+function attach(el){
+  if(!el) return;
+  const sk=el.querySelector(".stamp.k"), sr=el.querySelector(".stamp.r");
+  let sx=0,sy=0,dx=0,dy=0,on=false,lock=false;
+  el.addEventListener("pointerdown",e=>{
+    if(lock)return; on=true; sx=e.clientX; sy=e.clientY;
+    el.classList.add("drag"); el.setPointerCapture(e.pointerId);
+    window.addEventListener("pointermove",mv); window.addEventListener("pointerup",up);
+  });
+  function mv(e){
+    if(!on)return; dx=e.clientX-sx; dy=e.clientY-sy;
+    el.style.transform=`translate(${dx}px,${dy}px) rotate(${dx*ROT}deg)`;
+    const p=Math.min(1,Math.abs(dx)/TH); sk.style.opacity=dx>0?p:0; sr.style.opacity=dx<0?p:0;
+  }
+  function up(){
+    if(!on)return; on=false; el.classList.remove("drag");
+    window.removeEventListener("pointermove",mv); window.removeEventListener("pointerup",up);
+    if(Math.abs(dx)>TH) fling(dx>0?"know":"review");
+    else if(Math.abs(dx)<SLOP&&Math.abs(dy)<SLOP){reset();flip();}
+    else reset();
+  }
+  function reset(){el.style.transition="transform .3s cubic-bezier(.3,1.3,.5,1)";el.style.transform="";sk.style.opacity=0;sr.style.opacity=0;dx=dy=0;}
+  function fling(dir){
+    if(lock)return; lock=true;
+    const off=(dir==="know"?1:-1)*innerWidth*1.4;
+    el.style.transition="transform .42s cubic-bezier(.4,.1,.4,1),opacity .42s";
+    el.style.transform=`translate(${off}px,${dy}px) rotate(${off*ROT}deg)`;
+    el.style.opacity=0; (dir==="know"?sk:sr).style.opacity=1;
+    el.addEventListener("transitionend",()=>decide(dir),{once:true});
+  }
+  el._fling=fling;
+}
+function flingTop(dir){const t=deckEl.lastElementChild;if(t&&t._fling)t._fling(dir);}
+
+$("bK").onclick=()=>flingTop("know");
+$("bR").onclick=()=>flingTop("review");
+$("bF").onclick=flip;
+$("undo").onclick=undo;
+document.addEventListener("keydown",e=>{
+  if($("done").style.display==="flex")return;
+  if(e.key==="ArrowRight"){e.preventDefault();flingTop("know");}
+  else if(e.key==="ArrowLeft"){e.preventDefault();flingTop("review");}
+  else if(e.key===" "||e.key==="ArrowUp"||e.key==="ArrowDown"){e.preventDefault();flip();}
+  else if(e.key==="Backspace"){e.preventDefault();undo();}
+});
+
+function finish(){
+  $("play").style.display="none"; deckEl.style.display="none";
+  $("controls").style.display="none"; $("hint").style.display="none";
+  $("done").style.display="flex";
+  $("doneSub").textContent = passes===0
+    ? "Clean run — you knew every word first time."
+    : `You looped back ${passes} time${passes===1?"":"s"} on the tricky ones.`;
+}
+function restart(){
+  $("play").style.display="flex"; deckEl.style.display="block";
+  $("controls").style.display="flex"; $("hint").style.display="block";
+  $("done").style.display="none"; build(); render();
+}
+
+build(); render();
+</script>
