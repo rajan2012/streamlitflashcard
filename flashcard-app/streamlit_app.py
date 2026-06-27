@@ -56,7 +56,7 @@ total = len(all_cards)
 st.title("German → English")
 st.caption(f"{total:,} words · {secret('S3_KEY')}")
 
-SIZES = [20, 30, 50, 70, 90]
+SIZES = [10, 20, 30, 50, 70, 90]
 
 c1, c2 = st.columns([1, 2])
 start = c1.number_input("From row", min_value=1, max_value=total, value=1, step=1)
